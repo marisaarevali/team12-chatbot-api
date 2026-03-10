@@ -9,6 +9,7 @@ chat
 
     ChatController
     ChatService
+    ChatServiceImpl
     ChatRequest
     ChatResponse
 
@@ -71,6 +72,7 @@ user*
 chat
    ChatController
    ChatService
+   ChatServiceImpl
    ChatRequest
    ChatResponse
 ```
@@ -98,13 +100,15 @@ POST /chat
 
 ---
 
-#### 2) ChatService
+#### 2) ChatService, ChatServiceImpl
 
 - Purpose:
     - **orchestrates the chatbot logic**
     - ChatService decides how the question is answered
     - the brain of the backend
 
+ChatService - interface
+ChatServiceImpl - corresponding service class
 
 - An example flow:
 
