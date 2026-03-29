@@ -23,10 +23,10 @@ public class DbInitialize implements CommandLineRunner {
     public void run(String... args) throws SQLException {
         userRepository.deleteAll(); // FIXME:: remove, if testing done, as it deletes all previous data on app restart
         List<User> users = new ArrayList<>();
-        users.add(new User("Johan"));
-        users.add(new User("Merily"));
-        users.add(new User("Milli"));
-        users.add(new User("Villi"));
+        users.add(new User("Johan", "johan@someemail.com"));
+        users.add(new User("Merily", "merily@someemail.com"));
+        users.add(new User("Milli", "milly@someemail.com"));
+        users.add(new User("Villi", "villi@someemail.com"));
 
         userRepository.saveAll(users);
 
