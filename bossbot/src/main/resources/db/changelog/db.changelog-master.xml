@@ -31,6 +31,9 @@
     <!-- Ensure a default user with id=1 exists for local/dev environments -->
     <include file="db/changelog/sql/V2026.04.05_1000__ensure_user_id_1.sql" relativeToChangelogFile="false"/>
 
+    <!-- If table previously exists, and has role_name set smallint, change the column type varchar -->
+    <include file="db/changelog/sql/V2026.04.05_1900__alter_table_roles.sql" relativeToChangelogFile="false"/>
+
     <!-- Add future migrations below this line -->
 
 </databaseChangeLog>

@@ -19,4 +19,8 @@ public class Role {
     @Enumerated(EnumType.STRING)
     @Column(name = "role_name", length = 50, nullable = false, unique = true)
     private RoleName roleName;
+
+    public Role(RoleName roleName) {
+        this.roleName = roleName;
+    }
 }
