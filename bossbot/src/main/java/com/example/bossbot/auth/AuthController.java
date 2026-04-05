@@ -55,9 +55,6 @@ public class AuthController {
 
         try {
             var result = authService.processOAuthLogin(auth);
-
-            // Store jwt in a HTTPOnly secure cookie, to ensure user auth token is saved securely
-            // (prevents client-side scripts access)
             int jwtCookieMaxAgeSeconds = jwtCookieMaxAgeMilliSeconds / 1000;
             Cookie cookie = createOrClearJwtCookie(result.dto().token(), jwtCookieMaxAgeSeconds);
             response.addCookie(cookie);
@@ -71,16 +68,13 @@ public class AuthController {
 
     @PostMapping("/logout")
     public ResponseEntity<?> logout(HttpServletRequest request, HttpServletResponse response) {
-        // Invalidate the server-side session (removes OAuth2 authentication)
         HttpSession session = request.getSession(false);
         if (session != null) {
             session.invalidate();
         }
 
-        // Clear the Spring Security context
         SecurityContextHolder.clearContext();
 
-        // Clear the JWT cookie
         Cookie cookie = createOrClearJwtCookie("", 0);
         response.addCookie(cookie);
 
@@ -108,7 +102,7 @@ public class AuthController {
     private Cookie createOrClearJwtCookie(String token, Integer maxAgeSeconds){
         Cookie cookie = new Cookie("jwt", token);
         cookie.setHttpOnly(true);
-        cookie.setSecure(true); // HTTPS enabled with domain
+        cookie.setSecure(true);
         cookie.setPath("/");
         cookie.setMaxAge(maxAgeSeconds);
 

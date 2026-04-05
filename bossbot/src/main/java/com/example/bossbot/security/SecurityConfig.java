@@ -114,19 +114,16 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 // TODO:: test csrf with POST, PUT, DELETE before applying it:
                 // .csrf(csrf -> csrf.csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse()))
-                // Let Spring Security add CORS headers on 401/403/preflight too
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .requestCache(RequestCacheConfigurer::disable)
-                // Use IF_REQUIRED session management (stateless for API, sessions for OAuth2)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> {
+                    // TODO:: permitAll - remove in production
                     if (permitAll) {
                         auth.anyRequest().permitAll();
                     } else {
                         auth
-                                // Allow OPTIONS for CORS preflight
                                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                                // Allow OAuth2 endpoints and public routes
                                 .requestMatchers("/", "/error", "/oauth2/**", "/login/oauth2/code/**", "/auth/login/success")
                                 .permitAll()
                                 // TODO: add other public API EP if any
@@ -134,7 +131,6 @@ public class SecurityConfig {
                                 .anyRequest().authenticated();
                     }
                 })
-                // With permitAll=false: Return 401 JSON for /api/** so FE can handle auth; non-API paths still redirect to Google login
                 .exceptionHandling(ex -> ex                                                                                                                                                                                                                          .defaultAuthenticationEntryPointFor(
                                 (request, response, authException) -> {                                                                                                                                                                                                          response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized");
                                 },
@@ -186,5 +182,3 @@ public class SecurityConfig {
         };
     }
 }
-
-

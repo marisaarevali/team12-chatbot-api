@@ -43,7 +43,6 @@ public class AuthService {
 
     public AuthResult processOAuthLogin(OAuth2AuthenticationToken auth) {
         String email = requireEmail(auth);
-
         String name = auth.getPrincipal().getAttribute("name");
 
         // Check if user exists or create a new one
@@ -53,7 +52,6 @@ public class AuthService {
                         .name(name)
                         .build());
 
-        // Default role assignment (if new user)
         if (dbUser.getRole() == null) {
             Role defaultRole = roleRepository.findByRoleName(RoleName.USER)
                     .orElseThrow(() -> new IllegalArgumentException("Default role USER not found"));
