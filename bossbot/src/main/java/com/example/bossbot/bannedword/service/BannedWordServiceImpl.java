@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.example.bossbot.chat.service.ContentModerationService;
 
 import java.util.List;
 
@@ -20,6 +21,7 @@ public class BannedWordServiceImpl implements BannedWordService {
     private static final String BANNED_WORD_NOT_FOUND = "Banned word not found with ID: ";
 
     private final BannedWordRepository repository;
+    private final ContentModerationService contentModerationService;
 
     @Override
     @Transactional
@@ -41,6 +43,7 @@ public class BannedWordServiceImpl implements BannedWordService {
                 .build();
 
         BannedWord saved = repository.save(entity);
+        contentModerationService.refreshCache();
         log.info("Created banned word with ID: {}", saved.getId());
 
         return BannedWordResponse.fromEntity(saved);
@@ -113,6 +116,7 @@ public class BannedWordServiceImpl implements BannedWordService {
         entity.setUpdatedBy(currentUserId);
 
         BannedWord updated = repository.save(entity);
+        contentModerationService.refreshCache();
         log.info("Updated banned word with ID: {}", id);
 
         return BannedWordResponse.fromEntity(updated);
@@ -128,6 +132,7 @@ public class BannedWordServiceImpl implements BannedWordService {
 
         entity.setIsActive(false);
         repository.save(entity);
+        contentModerationService.refreshCache();
 
         log.info("Soft deleted banned word with ID: {}", id);
     }
