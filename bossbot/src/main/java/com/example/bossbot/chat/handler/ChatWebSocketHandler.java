@@ -27,6 +27,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ChatConfig chatConfig;
     private final ObjectMapper objectMapper;
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, SpamState> spamStates = new ConcurrentHashMap<>();
 
     public ChatWebSocketHandler(ChatService chatService, ChatConfig chatConfig) {
         this.chatService = chatService;
@@ -48,6 +49,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage textMessage) {
         var safeSession = sessions.getOrDefault(session.getId(), session);
+
+        // Rate limit check (progressive backoff)
+        if (isRateLimited(session.getId(), safeSession)) {
+            return;
+        }
 
         try {
             ChatWebSocketMessage message = objectMapper.readValue(
@@ -80,12 +86,45 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session.getId());
+        spamStates.remove(session.getId());
         log.info("WebSocket disconnected: {} (status: {})", session.getId(), status);
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.error("WebSocket transport error for session {}: {}", session.getId(), exception.getMessage());
+    }
+
+    private boolean isRateLimited(String sessionId, WebSocketSession session) {
+        SpamState state = spamStates.computeIfAbsent(sessionId, k -> new SpamState());
+        long now = System.currentTimeMillis();
+        long elapsed = now - state.lastMessageTime;
+
+        // Reset if idle long enough
+        if (elapsed >= chatConfig.getRateLimitResetMs()) {
+            state.messageCount = 0;
+            state.currentCooldownMs = 0;
+        }
+
+        // Reject if still within active cooldown
+        if (state.currentCooldownMs > 0 && elapsed < state.currentCooldownMs) {
+            long remaining = state.currentCooldownMs - elapsed;
+            sendResponse(session, ChatWebSocketResponse.rateLimited(remaining));
+            return true;
+        }
+
+        // Allow message through
+        state.lastMessageTime = now;
+        state.messageCount++;
+
+        // Escalate cooldown after burst threshold
+        if (state.messageCount > chatConfig.getRateLimitBurstCount()) {
+            state.currentCooldownMs = state.currentCooldownMs == 0
+                    ? chatConfig.getRateLimitBaseMs()
+                    : Math.min(state.currentCooldownMs * 2, chatConfig.getRateLimitMaxMs());
+        }
+
+        return false;
     }
 
     private void sendResponse(WebSocketSession session, ChatWebSocketResponse response) {
@@ -100,5 +139,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         } catch (Exception e) {
             log.error("Failed to send WebSocket response: {}", e.getMessage(), e);
         }
+    }
+
+    private static class SpamState {
+        int messageCount;
+        long lastMessageTime;
+        long currentCooldownMs;
     }
 }
