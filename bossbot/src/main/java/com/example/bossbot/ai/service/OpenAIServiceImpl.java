@@ -13,6 +13,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @Service
@@ -34,7 +35,7 @@ public class OpenAIServiceImpl implements OpenAIService {
     }
 
     @Override
-    public String streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback) {
+    public String streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
         log.info("Calling OpenAI API with model: {}", config.getModel());
 
         List<PromptBuilder.ChatMessage> messages = promptBuilder.buildMessages(conversationHistory, userMessage);
@@ -57,6 +58,9 @@ public class OpenAIServiceImpl implements OpenAIService {
 
         try (StreamResponse<ChatCompletionChunk> streamResponse = client.chat().completions().createStreaming(paramsBuilder.build())) {
             streamResponse.stream().forEach(chunk -> {
+                if (cancelFlag.get()) {
+                    throw new RuntimeException("Generation cancelled");
+                }
                 List<ChatCompletionChunk.Choice> choices = chunk.choices();
 
                 if (!choices.isEmpty()) {
@@ -68,6 +72,12 @@ public class OpenAIServiceImpl implements OpenAIService {
                     }
                 }
             });
+        } catch (RuntimeException e) {
+            if (cancelFlag.get()) {
+                log.info("OpenAI chat cancelled by user");
+            } else {
+                throw e;
+            }
         }
 
         log.info("OpenAI response completed. Total length: {}", fullResponse.length());

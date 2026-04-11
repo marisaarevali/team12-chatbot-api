@@ -12,6 +12,30 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  ollama:
+    image: ollama/ollama
+    container_name: bossbot-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama-init:
+    image: ollama/ollama
+    container_name: bossbot-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["sh", "-c", "ollama pull nomic-embed-text && ollama pull llama3.2:3b"]
+    environment:
+      - OLLAMA_HOST=ollama:11434
+
   backend:
     build:
       context: bossbot
@@ -26,12 +50,18 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - OLLAMA_ENABLED=${OLLAMA_ENABLED:-false}
+      - OLLAMA_URL=http://ollama:11434
     ports:
       - "8080:8080"
     env_file:
       - .env
     depends_on:
-      - postgres
+      postgres:
+        condition: service_started
+      ollama-init:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
+  ollama_data:

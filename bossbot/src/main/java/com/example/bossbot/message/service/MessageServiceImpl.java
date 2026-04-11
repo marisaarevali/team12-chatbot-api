@@ -58,7 +58,7 @@ public class MessageServiceImpl implements MessageService {
     @Transactional(readOnly = true)
     public List<MessageResponse> getAll(Long conversationId) {
         log.info("Fetching messages for conversation ID: {}", conversationId);
-        return repository.findByConversationIdAndIsActiveTrueOrderByCreatedAtAsc(conversationId).stream()
+        return repository.findByConversationIdAndIsActiveTrueOrderByCreatedAtAscIdAsc(conversationId).stream()
                 .map(MessageResponse::fromEntity)
                 .toList();
     }

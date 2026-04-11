@@ -9,6 +9,7 @@ import com.example.bossbot.message.entity.MessageRole;
 import com.example.bossbot.message.service.MessageService;
 import com.example.bossbot.stampanswer.dto.StampAnswerResponse;
 import com.example.bossbot.stampanswer.service.StampAnswerService;
+import com.example.bossbot.stampanswer.service.StampMatcherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -20,6 +21,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -41,6 +44,9 @@ class ChatServiceImplTest {
     private StampAnswerService stampAnswerService;
 
     @Mock
+    private StampMatcherService stampMatcherService;
+
+    @Mock
     private OpenAIService openAIService;
 
     @InjectMocks
@@ -50,6 +56,7 @@ class ChatServiceImplTest {
     private MessageResponse botMessageResponse;
     private List<ChatWebSocketResponse> sentResponses;
     private Consumer<ChatWebSocketResponse> send;
+    private AtomicBoolean cancelFlag;
 
     @BeforeEach
     void setUp() {
@@ -75,6 +82,7 @@ class ChatServiceImplTest {
 
         sentResponses = new ArrayList<>();
         send = sentResponses::add;
+        cancelFlag = new AtomicBoolean(false);
     }
 
     @Test
@@ -87,14 +95,14 @@ class ChatServiceImplTest {
         );
 
         // When
-        service.processMessage(10L, "Hello", send);
+        service.processMessage(10L, "Hello", send, cancelFlag);
 
         // Then
         assertThat(sentResponses).hasSize(2);
         assertThat(sentResponses.get(0).getType()).isEqualTo("MESSAGE");
         assertThat(sentResponses.get(1).getType()).isEqualTo("BLOCKED");
         verify(stampAnswerService, never()).getByQuestion(any());
-        verify(openAIService, never()).streamChat(any(), any(), any());
+        verify(openAIService, never()).streamChat(any(), any(), any(), any());
     }
 
     @Test
@@ -112,7 +120,7 @@ class ChatServiceImplTest {
         );
 
         // When
-        service.processMessage(10L, "Hello", send);
+        service.processMessage(10L, "Hello", send, cancelFlag);
 
         // Then
         assertThat(sentResponses).hasSize(3);
@@ -134,36 +142,36 @@ class ChatServiceImplTest {
         );
 
         // When
-        service.processMessage(10L, "Hello", send);
+        service.processMessage(10L, "Hello", send, cancelFlag);
 
         // Then
         assertThat(sentResponses).hasSize(2);
         assertThat(sentResponses.get(0).getType()).isEqualTo("MESSAGE");
         assertThat(sentResponses.get(1).getType()).isEqualTo("MESSAGE");
-        verify(openAIService, never()).streamChat(any(), any(), any());
+        verify(openAIService, never()).streamChat(any(), any(), any(), any());
     }
 
     @Test
-    @DisplayName("Should return stamp answer on fuzzy match")
-    void testProcessMessage_FuzzyStampAnswer() {
+    @DisplayName("Should return stamp answer on semantic match")
+    void testProcessMessage_SemanticMatch() {
         // Given
-        StampAnswerResponse fuzzyMatch = StampAnswerResponse.builder().id(2L).answer("Fuzzy answer").build();
+        StampAnswerResponse semanticMatch = StampAnswerResponse.builder().id(2L).answer("Semantic answer").build();
         when(messageService.create(any(CreateMessageRequest.class)))
                 .thenReturn(userMessageResponse)
                 .thenReturn(botMessageResponse);
         when(contentModerationService.check("Hello")).thenReturn(ModerationResult.none());
         when(stampAnswerService.getByQuestion("Hello")).thenReturn(null);
-        when(stampAnswerService.search("Hello")).thenReturn(List.of(fuzzyMatch));
+        when(stampMatcherService.findBestMatch("Hello")).thenReturn(Optional.of(semanticMatch));
 
         // When
-        service.processMessage(10L, "Hello", send);
+        service.processMessage(10L, "Hello", send, cancelFlag);
 
         // Then
         assertThat(sentResponses).hasSize(2);
         assertThat(sentResponses.get(0).getType()).isEqualTo("MESSAGE");
         assertThat(sentResponses.get(1).getType()).isEqualTo("MESSAGE");
         verify(stampAnswerService).recordUsage(2L);
-        verify(openAIService, never()).streamChat(any(), any(), any());
+        verify(openAIService, never()).streamChat(any(), any(), any(), any());
     }
 
     @Test
@@ -175,12 +183,12 @@ class ChatServiceImplTest {
                 .thenReturn(botMessageResponse);
         when(contentModerationService.check("Hello")).thenReturn(ModerationResult.none());
         when(stampAnswerService.getByQuestion("Hello")).thenReturn(null);
-        when(stampAnswerService.search("Hello")).thenReturn(List.of());
+        when(stampMatcherService.findBestMatch("Hello")).thenReturn(Optional.empty());
         when(messageService.getAll(10L)).thenReturn(List.of(userMessageResponse));
-        when(openAIService.streamChat(any(), eq("Hello"), any())).thenReturn("AI response");
+        when(openAIService.streamChat(any(), eq("Hello"), any(), any())).thenReturn("AI response");
 
         // When
-        service.processMessage(10L, "Hello", send);
+        service.processMessage(10L, "Hello", send, cancelFlag);
 
         // Then
         assertThat(sentResponses).hasSize(3);
@@ -196,7 +204,7 @@ class ChatServiceImplTest {
         when(messageService.create(any(CreateMessageRequest.class))).thenThrow(new RuntimeException("DB error"));
 
         // When
-        service.processMessage(10L, "Hello", send);
+        service.processMessage(10L, "Hello", send, cancelFlag);
 
         // Then
         assertThat(sentResponses).hasSize(1);

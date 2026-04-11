@@ -104,7 +104,7 @@ class MessageServiceImplTest {
     void testGetAll_WithConversationId() {
         // Given
         List<Message> entities = List.of(testEntity);
-        when(repository.findByConversationIdAndIsActiveTrueOrderByCreatedAtAsc(10L)).thenReturn(entities);
+        when(repository.findByConversationIdAndIsActiveTrueOrderByCreatedAtAscIdAsc(10L)).thenReturn(entities);
 
         // When
         List<MessageResponse> responses = service.getAll(10L);
@@ -112,7 +112,7 @@ class MessageServiceImplTest {
         // Then
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getConversationId()).isEqualTo(10L);
-        verify(repository).findByConversationIdAndIsActiveTrueOrderByCreatedAtAsc(10L);
+        verify(repository).findByConversationIdAndIsActiveTrueOrderByCreatedAtAscIdAsc(10L);
     }
 
     @Test

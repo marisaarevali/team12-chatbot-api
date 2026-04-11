@@ -98,7 +98,7 @@ docker-compose up --build
 
 ## Docker (recommended)
 
-This project includes a `docker-compose.yaml` that starts a Postgres database and the backend. The backend is exposed on port `8080` on the host.
+This project includes a `docker-compose.yaml` that starts a Postgres database, Ollama (for RAG-based stamp answer matching), and the backend. The backend is exposed on port `8080` on the host.
 
 - Ensure Docker Desktop is installed and running (for macOS):
 
@@ -119,13 +119,87 @@ docker compose up --build
 docker compose ps
 docker compose logs -f backend
 docker compose logs -f postgres
+docker compose logs -f ollama
 docker compose down
 ```
 
 Notes:
 
 - The `postgres` service is available to the backend container at host `postgres:5432` (the compose file maps the host port `5433` to the container `5432`).
+- The `ollama` service runs a local LLM server for semantic stamp answer matching. On first startup, `ollama-init` automatically pulls the `nomic-embed-text` embedding model (~274MB). The model is persisted in a Docker volume, so subsequent startups are instant.
 - If you prefer running the backend locally instead of in Compose, export the vars from `.env` first (`set -a; source .env; set +a`) and then run `./mvnw -pl bossbot spring-boot:run`.
+
+## Ollama (RAG + Offline Chat)
+
+The chatbot uses **Ollama** for two things:
+
+1. **Semantic stamp answer matching (RAG)** — converts text into vector embeddings to find the closest stamp answer by meaning. For example, "when do you open?" matches "What are our opening hours?" even though they share few words.
+2. **Offline chat (replaces OpenAI)** — when no OpenAI API key is set, Ollama runs a local LLM (`llama3.2:3b` by default) for chat responses instead of returning mock responses. No internet connection or API keys needed.
+
+### How it works
+
+1. On startup, all active stamp answers are embedded into vectors using the `nomic-embed-text` model
+2. When a user sends a message, it is embedded and compared against all stamp answer vectors
+3. If the cosine similarity exceeds the threshold (default 0.7), the stamp answer is returned
+4. If no stamp answer matches, the message goes to Ollama's chat model (or OpenAI if configured)
+5. If Ollama is unavailable, stamp answer matching falls back to keyword-overlap matching automatically
+
+### With Docker Compose (recommended)
+
+Ollama is included in `docker-compose.yaml`. Just set `OLLAMA_ENABLED=true` in your `.env` and run:
+
+```bash
+docker compose up
+```
+
+The `ollama-init` service automatically pulls both the embedding model and the chat model on first startup. No manual setup needed.
+
+### Without Docker (local)
+
+```bash
+# Install Ollama
+brew install ollama
+
+# Start Ollama server
+ollama serve
+
+# Pull the models (one-time)
+ollama pull nomic-embed-text
+ollama pull llama3.2:3b
+```
+
+Then set in your `.env`:
+
+```
+OLLAMA_ENABLED=true
+OLLAMA_URL=http://localhost:11434
+```
+
+### Configuration
+
+All Ollama settings are optional and have sensible defaults:
+
+| Environment Variable | Default | Description |
+|---|---|---|
+| `OLLAMA_ENABLED` | `false` | Enable/disable Ollama (both RAG and chat) |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama server URL |
+| `OLLAMA_MODEL` | `nomic-embed-text` | Embedding model for stamp answer matching |
+| `OLLAMA_CHAT_MODEL` | `llama3.2:3b` | Chat model for AI responses (used when no OpenAI key is set) |
+| `STAMP_MATCHER_SIMILARITY_THRESHOLD` | `0.7` | Minimum cosine similarity for a semantic stamp answer match (0.0-1.0) |
+| `STAMP_MATCHER_KEYWORD_THRESHOLD` | `0.5` | Minimum keyword overlap ratio for keyword-based matching (0.0-1.0) |
+| `STAMP_MATCHER_MIN_INPUT_LENGTH` | `3` | Minimum input length before attempting matching |
+
+### Which AI service is used?
+
+| `openai.api-key` | `ollama.enabled` | AI service |
+|---|---|---|
+| Set to a real key | any | OpenAI (cloud) |
+| `mock` (default) | `true` | Ollama (local) |
+| `mock` (default) | `false` | Mock responses (no AI) |
+
+### Disabling Ollama
+
+Set `OLLAMA_ENABLED=false` in `.env` (the default). The backend will use keyword-overlap matching for stamp answers and return mock responses for chat. No external services needed.
 
 ## Spring Profiles
 
