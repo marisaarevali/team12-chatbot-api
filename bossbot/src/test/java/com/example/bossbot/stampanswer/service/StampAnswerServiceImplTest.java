@@ -30,6 +30,9 @@ class StampAnswerServiceImplTest {
     @Mock
     private StampAnswerRepository repository;
 
+    @Mock
+    private StampMatcherService stampMatcherService;
+
     @InjectMocks
     private StampAnswerServiceImpl service;
 
@@ -44,8 +47,6 @@ class StampAnswerServiceImplTest {
                 .question("What is Spring Boot?")
                 .keywords("spring, boot, framework")
                 .answer("Spring Boot is a Java framework")
-                .category("technical")
-                .priority(5)
                 .isActive(true)
                 .usageCount(10)
                 .createdAt(LocalDateTime.now())
@@ -57,8 +58,6 @@ class StampAnswerServiceImplTest {
                 .question("What is Spring Boot?")
                 .keywords("spring, boot, framework")
                 .answer("Spring Boot is a Java framework")
-                .category("technical")
-                .priority(5)
                 .isActive(true)
                 .build();
 
@@ -82,6 +81,7 @@ class StampAnswerServiceImplTest {
         assertThat(response.getQuestion()).isEqualTo(testEntity.getQuestion());
         verify(repository).existsByQuestionIgnoreCase(createRequest.getQuestion());
         verify(repository).save(any(StampAnswer.class));
+        verify(stampMatcherService).refreshCache();
     }
 
     @Test
@@ -131,7 +131,7 @@ class StampAnswerServiceImplTest {
     void testGetAllActive() {
         // Given
         List<StampAnswer> entities = Arrays.asList(testEntity);
-        when(repository.findByIsActiveTrueOrderByPriorityDesc()).thenReturn(entities);
+        when(repository.findByIsActiveTrueOrderByCreatedAtDesc()).thenReturn(entities);
 
         // When
         List<StampAnswerResponse> responses = service.getAllActive();
@@ -139,7 +139,7 @@ class StampAnswerServiceImplTest {
         // Then
         assertThat(responses).hasSize(1);
         assertThat(responses.get(0).getId()).isEqualTo(1L);
-        verify(repository).findByIsActiveTrueOrderByPriorityDesc();
+        verify(repository).findByIsActiveTrueOrderByCreatedAtDesc();
     }
 
     @Test
@@ -171,6 +171,7 @@ class StampAnswerServiceImplTest {
         assertThat(response).isNotNull();
         verify(repository).findById(1L);
         verify(repository).save(any(StampAnswer.class));
+        verify(stampMatcherService).refreshCache();
     }
 
     @Test
@@ -186,6 +187,7 @@ class StampAnswerServiceImplTest {
         // Then
         verify(repository).findById(1L);
         verify(repository).save(any(StampAnswer.class));
+        verify(stampMatcherService).refreshCache();
     }
 
     @Test
@@ -201,22 +203,6 @@ class StampAnswerServiceImplTest {
         // Then
         verify(repository).findById(1L);
         verify(repository).save(any(StampAnswer.class));
-    }
-
-    @Test
-    @DisplayName("Should get stamp answers by category")
-    void testGetByCategory() {
-        // Given
-        List<StampAnswer> entities = Arrays.asList(testEntity);
-        when(repository.findByCategoryAndIsActiveTrue("technical")).thenReturn(entities);
-
-        // When
-        List<StampAnswerResponse> responses = service.getByCategory("technical");
-
-        // Then
-        assertThat(responses).hasSize(1);
-        assertThat(responses.get(0).getCategory()).isEqualTo("technical");
-        verify(repository).findByCategoryAndIsActiveTrue("technical");
     }
 
     @Test

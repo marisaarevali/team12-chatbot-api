@@ -20,6 +20,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
     private static final String STAMP_ANSWER_NOT_FOUND = "Stamp answer not found with ID: ";
 
     private final StampAnswerRepository repository;
+    private final StampMatcherService stampMatcherService;
 
     @Override
     @Transactional
@@ -38,8 +39,6 @@ public class StampAnswerServiceImpl implements StampAnswerService {
                 .question(request.getQuestion())
                 .keywords(request.getKeywords())
                 .answer(request.getAnswer())
-                .category(request.getCategory())
-                .priority(request.getPriority() != null ? request.getPriority() : 0)
                 .isActive(request.getIsActive() != null ? request.getIsActive() : Boolean.TRUE)
                 .usageCount(0)
                 .createdBy(currentUserId)
@@ -47,6 +46,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
 
         StampAnswer saved = repository.save(entity);
         log.info("Created stamp answer with ID: {}", saved.getId());
+        stampMatcherService.refreshCache();
 
         return StampAnswerResponse.fromEntity(saved);
     }
@@ -77,17 +77,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
     public List<StampAnswerResponse> getAllActive() {
         log.info("Fetching all active stamp answers");
 
-        return repository.findByIsActiveTrueOrderByPriorityDesc().stream()
-                .map(StampAnswerResponse::fromEntity)
-                .toList();
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<StampAnswerResponse> getByCategory(String category) {
-        log.info("Fetching stamp answers by category: {}", category);
-
-        return repository.findByCategoryAndIsActiveTrue(category).stream()
+        return repository.findByIsActiveTrueOrderByCreatedAtDesc().stream()
                 .map(StampAnswerResponse::fromEntity)
                 .toList();
     }
@@ -133,12 +123,6 @@ public class StampAnswerServiceImpl implements StampAnswerService {
         if (request.getAnswer() != null) {
             entity.setAnswer(request.getAnswer());
         }
-        if (request.getCategory() != null) {
-            entity.setCategory(request.getCategory());
-        }
-        if (request.getPriority() != null) {
-            entity.setPriority(request.getPriority());
-        }
         if (request.getIsActive() != null) {
             entity.setIsActive(request.getIsActive());
         }
@@ -146,6 +130,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
 
         StampAnswer updated = repository.save(entity);
         log.info("Updated stamp answer with ID: {}", id);
+        stampMatcherService.refreshCache();
 
         return StampAnswerResponse.fromEntity(updated);
     }
@@ -160,6 +145,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
 
         entity.setIsActive(false);
         repository.save(entity);
+        stampMatcherService.refreshCache();
 
         log.info("Soft deleted stamp answer with ID: {}", id);
     }

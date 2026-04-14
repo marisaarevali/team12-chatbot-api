@@ -12,5 +12,5 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     /**
      * Find all active messages for a given conversation, oldest first
      */
-    List<Message> findByConversationIdAndIsActiveTrueOrderByCreatedAtAsc(Long conversationId);
+    List<Message> findByConversationIdAndIsActiveTrueOrderByCreatedAtAscIdAsc(Long conversationId);
 }

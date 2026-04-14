@@ -9,11 +9,14 @@ import com.example.bossbot.message.entity.MessageRole;
 import com.example.bossbot.message.service.MessageService;
 import com.example.bossbot.stampanswer.dto.StampAnswerResponse;
 import com.example.bossbot.stampanswer.service.StampAnswerService;
+import com.example.bossbot.stampanswer.service.StampMatcherService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @Service
@@ -24,10 +27,11 @@ public class ChatServiceImpl implements ChatService {
     private final MessageService messageService;
     private final ContentModerationService contentModerationService;
     private final StampAnswerService stampAnswerService;
+    private final StampMatcherService stampMatcherService;
     private final OpenAIService openAIService;
 
     @Override
-    public void processMessage(Long conversationId, String content, Consumer<ChatWebSocketResponse> send) {
+    public void processMessage(Long conversationId, String content, Consumer<ChatWebSocketResponse> send, AtomicBoolean cancelFlag) {
         try {
             // 1. Save user message
             MessageResponse userMessage = messageService.create(
@@ -63,12 +67,12 @@ public class ChatServiceImpl implements ChatService {
                 return;
             }
 
-            // 4. Stamp answer lookup — fuzzy match
-            List<StampAnswerResponse> searchResults = stampAnswerService.search(content);
+            // 4. Stamp answer lookup — semantic/keyword match
+            Optional<StampAnswerResponse> semanticMatch = stampMatcherService.findBestMatch(content);
 
-            if (!searchResults.isEmpty()) {
-                StampAnswerResponse bestMatch = searchResults.getFirst();
-                log.info("Stamp answer found (fuzzy match) for conversation: {}", conversationId);
+            if (semanticMatch.isPresent()) {
+                StampAnswerResponse bestMatch = semanticMatch.get();
+                log.info("Stamp answer found (semantic match) for conversation: {}", conversationId);
                 stampAnswerService.recordUsage(bestMatch.getId());
                 MessageResponse botMessage = saveBotMessage(conversationId, bestMatch.getAnswer());
                 send.accept(ChatWebSocketResponse.message(botMessage));
@@ -81,12 +85,21 @@ public class ChatServiceImpl implements ChatService {
 
             List<MessageResponse> history = messageService.getAll(conversationId);
 
-            String fullResponse = openAIService.streamChat(history, content, token ->
-                    send.accept(ChatWebSocketResponse.streamToken(token))
+            OpenAIService.ChatResult result = openAIService.streamChat(history, content, token ->
+                    send.accept(ChatWebSocketResponse.streamToken(token)),
+                    cancelFlag
             );
 
-            MessageResponse botMessage = saveBotMessage(conversationId, fullResponse);
-            send.accept(ChatWebSocketResponse.streamEnd(botMessage));
+            if (result.usedFallback()) {
+                send.accept(ChatWebSocketResponse.warning("OpenAI quota exceeded \u2014 switched to local AI model"));
+            }
+
+            if (!result.response().isBlank()) {
+                MessageResponse botMessage = saveBotMessage(conversationId, result.response());
+                send.accept(ChatWebSocketResponse.streamEnd(botMessage));
+            } else {
+                send.accept(ChatWebSocketResponse.streamEnd(null));
+            }
 
         } catch (Exception e) {
             log.error("Error processing message for conversation {}: {}", conversationId, e.getMessage(), e);
