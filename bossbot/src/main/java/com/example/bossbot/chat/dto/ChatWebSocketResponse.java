@@ -20,6 +20,7 @@ public class ChatWebSocketResponse {
     private String token;
     private Long conversationId;
     private Integer maxMessageLength;
+    private Long retryAfterMs;
 
     public static ChatWebSocketResponse config(int maxMessageLength) {
         return ChatWebSocketResponse.builder()
@@ -74,6 +75,14 @@ public class ChatWebSocketResponse {
         return ChatWebSocketResponse.builder()
                 .type("ERROR")
                 .text(text)
+                .build();
+    }
+
+    public static ChatWebSocketResponse rateLimited(long retryAfterMs) {
+        return ChatWebSocketResponse.builder()
+                .type("RATE_LIMITED")
+                .text("Too many messages. Please wait.")
+                .retryAfterMs(retryAfterMs)
                 .build();
     }
 }
