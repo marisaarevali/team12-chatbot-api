@@ -20,7 +20,7 @@ public class MockOpenAIServiceImpl implements OpenAIService {
     private final OpenAIConfig config;
 
     @Override
-    public String streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
+    public ChatResult streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
         log.info("Using MOCK OpenAI service (api-key=mock). Model configured: {}", config.getModel());
 
         String mockResponse = "I'm BossBot! This is a mock response. " +
@@ -46,6 +46,6 @@ public class MockOpenAIServiceImpl implements OpenAIService {
             }
         }
 
-        return sent.toString();
+        return new ChatResult(sent.toString(), false);
     }
 }

@@ -33,7 +33,12 @@ public class PromptBuilder {
             messages.add(new ChatMessage(role, msg.getContent()));
         }
 
-        if (messages.isEmpty() || !messages.getLast().content().equals(userMessage)) {
+        // Ensure the conversation ends with the user's latest message.
+        // History already includes it (saved before calling AI), but if maxHistory
+        // truncation cut it off, or history was empty, re-add it as a safety net.
+        boolean endsWithUserMessage = messages.size() > 1
+                && "user".equals(messages.getLast().role());
+        if (!endsWithUserMessage) {
             messages.add(new ChatMessage("user", userMessage));
         }
 

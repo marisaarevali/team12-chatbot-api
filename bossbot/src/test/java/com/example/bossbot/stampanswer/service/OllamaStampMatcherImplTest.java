@@ -39,7 +39,7 @@ class OllamaStampMatcherImplTest {
     void setUp() {
         config = new StampMatcherConfig();
         config.setSimilarityThreshold(0.7);
-        config.setKeywordThreshold(0.5);
+        config.setKeywordThreshold(0.3);
         config.setMinInputLength(3);
         matcher = new OllamaStampMatcherImpl(repository, embeddingService, config);
 

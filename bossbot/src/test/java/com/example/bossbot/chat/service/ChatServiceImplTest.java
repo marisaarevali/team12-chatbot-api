@@ -185,7 +185,7 @@ class ChatServiceImplTest {
         when(stampAnswerService.getByQuestion("Hello")).thenReturn(null);
         when(stampMatcherService.findBestMatch("Hello")).thenReturn(Optional.empty());
         when(messageService.getAll(10L)).thenReturn(List.of(userMessageResponse));
-        when(openAIService.streamChat(any(), eq("Hello"), any(), any())).thenReturn("AI response");
+        when(openAIService.streamChat(any(), eq("Hello"), any(), any())).thenReturn(new OpenAIService.ChatResult("AI response", false));
 
         // When
         service.processMessage(10L, "Hello", send, cancelFlag);

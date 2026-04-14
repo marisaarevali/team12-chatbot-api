@@ -32,7 +32,9 @@ final class KeywordMatchUtils {
             }
 
             long matchCount = inputWords.stream().filter(answerWords::contains).count();
-            double score = (double) matchCount / inputWords.size();
+            // Jaccard similarity: intersection / union — fair to both short and long inputs
+            long unionSize = inputWords.size() + answerWords.size() - matchCount;
+            double score = unionSize == 0 ? 0.0 : (double) matchCount / unionSize;
 
             if (score > bestScore || (score == bestScore && bestMatch != null && sa.getPriority() > bestMatch.getPriority())) {
                 bestScore = score;

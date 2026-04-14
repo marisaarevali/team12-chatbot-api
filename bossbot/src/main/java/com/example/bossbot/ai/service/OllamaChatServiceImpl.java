@@ -13,7 +13,12 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
 @Service
@@ -22,12 +27,19 @@ import java.util.function.Consumer;
 @ConditionalOnExpression("'${openai.api-key:mock}' == 'mock' and ${ollama.enabled:false}")
 public class OllamaChatServiceImpl implements OpenAIService {
 
+    private static final long STREAM_READ_TIMEOUT_MS = 120_000;
+
     private final OllamaConfig config;
     private final PromptBuilder promptBuilder;
     private final OllamaHttpClient httpClient;
+    private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "ollama-stream-watchdog");
+        t.setDaemon(true);
+        return t;
+    });
 
     @Override
-    public String streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
+    public ChatResult streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
         log.info("Using Ollama chat with model: {}", config.getChatModel());
 
         List<PromptBuilder.ChatMessage> chatMessages = promptBuilder.buildMessages(conversationHistory, userMessage);
@@ -39,10 +51,23 @@ public class OllamaChatServiceImpl implements OpenAIService {
                 Map.of("model", config.getChatModel(), "messages", messages, "stream", true));
 
         StringBuilder fullResponse = new StringBuilder();
+        AtomicLong lastActivity = new AtomicLong(System.currentTimeMillis());
+
+        ScheduledFuture<?> timeoutTask = watchdog.scheduleAtFixedRate(() -> {
+            if (System.currentTimeMillis() - lastActivity.get() > STREAM_READ_TIMEOUT_MS) {
+                log.warn("Ollama stream read timeout ({}ms with no data), closing stream", STREAM_READ_TIMEOUT_MS);
+                try {
+                    stream.close();
+                } catch (Exception e) {
+                    log.debug("Error closing timed-out stream", e);
+                }
+            }
+        }, 30, 30, TimeUnit.SECONDS);
 
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream))) {
             String line;
             while ((line = reader.readLine()) != null) {
+                lastActivity.set(System.currentTimeMillis());
                 if (cancelFlag.get()) {
                     log.info("Ollama chat cancelled by user");
                     break;
@@ -63,9 +88,11 @@ public class OllamaChatServiceImpl implements OpenAIService {
             throw e;
         } catch (Exception e) {
             throw new OllamaException("Error reading Ollama chat stream", e);
+        } finally {
+            timeoutTask.cancel(false);
         }
 
         log.info("Ollama chat response completed. Total length: {}", fullResponse.length());
-        return fullResponse.toString();
+        return new ChatResult(fullResponse.toString(), false);
     }
 }

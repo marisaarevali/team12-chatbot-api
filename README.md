@@ -186,7 +186,7 @@ All Ollama settings are optional and have sensible defaults:
 | `OLLAMA_MODEL` | `nomic-embed-text` | Embedding model for stamp answer matching |
 | `OLLAMA_CHAT_MODEL` | `llama3.2:3b` | Chat model for AI responses (used when no OpenAI key is set) |
 | `STAMP_MATCHER_SIMILARITY_THRESHOLD` | `0.7` | Minimum cosine similarity for a semantic stamp answer match (0.0-1.0) |
-| `STAMP_MATCHER_KEYWORD_THRESHOLD` | `0.5` | Minimum keyword overlap ratio for keyword-based matching (0.0-1.0) |
+| `STAMP_MATCHER_KEYWORD_THRESHOLD` | `0.3` | Minimum Jaccard similarity for keyword-based matching (0.0-1.0) |
 | `STAMP_MATCHER_MIN_INPUT_LENGTH` | `3` | Minimum input length before attempting matching |
 
 ### Which AI service is used?

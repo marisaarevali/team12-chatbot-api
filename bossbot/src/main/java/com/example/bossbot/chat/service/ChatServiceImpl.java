@@ -85,14 +85,20 @@ public class ChatServiceImpl implements ChatService {
 
             List<MessageResponse> history = messageService.getAll(conversationId);
 
-            String fullResponse = openAIService.streamChat(history, content, token ->
+            OpenAIService.ChatResult result = openAIService.streamChat(history, content, token ->
                     send.accept(ChatWebSocketResponse.streamToken(token)),
                     cancelFlag
             );
 
-            if (!fullResponse.isBlank()) {
-                MessageResponse botMessage = saveBotMessage(conversationId, fullResponse);
+            if (result.usedFallback()) {
+                send.accept(ChatWebSocketResponse.warning("OpenAI quota exceeded \u2014 switched to local AI model"));
+            }
+
+            if (!result.response().isBlank()) {
+                MessageResponse botMessage = saveBotMessage(conversationId, result.response());
                 send.accept(ChatWebSocketResponse.streamEnd(botMessage));
+            } else {
+                send.accept(ChatWebSocketResponse.streamEnd(null));
             }
 
         } catch (Exception e) {

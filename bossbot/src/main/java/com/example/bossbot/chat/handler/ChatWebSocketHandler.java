@@ -16,10 +16,14 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import jakarta.annotation.PreDestroy;
+
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
@@ -31,7 +35,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ObjectMapper objectMapper;
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, AtomicBoolean> cancelFlags = new ConcurrentHashMap<>();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final Set<String> processing = ConcurrentHashMap.newKeySet();
+    private final ExecutorService executor = Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors() * 2);
 
     public ChatWebSocketHandler(ChatService chatService, ChatConfig chatConfig) {
         this.chatService = chatService;
@@ -82,6 +88,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
+            if (!processing.add(session.getId())) {
+                sendResponse(safeSession, ChatWebSocketResponse.error("Please wait for the current response to finish"));
+                return;
+            }
+
             AtomicBoolean cancelFlag = new AtomicBoolean(false);
             cancelFlags.put(session.getId(), cancelFlag);
 
@@ -94,6 +105,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                     sendResponse(safeSession, ChatWebSocketResponse.error("Failed to process message"));
                 } finally {
                     cancelFlags.remove(session.getId());
+                    processing.remove(session.getId());
                 }
             });
 
@@ -107,12 +119,26 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session.getId());
         cancelFlags.remove(session.getId());
+        processing.remove(session.getId());
         log.info("WebSocket disconnected: {} (status: {})", session.getId(), status);
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.error("WebSocket transport error for session {}: {}", session.getId(), exception.getMessage());
+    }
+
+    @PreDestroy
+    void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        }
     }
 
     private void sendResponse(WebSocketSession session, ChatWebSocketResponse response) {

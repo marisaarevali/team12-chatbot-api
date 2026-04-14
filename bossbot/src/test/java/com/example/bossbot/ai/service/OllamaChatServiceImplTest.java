@@ -66,9 +66,10 @@ class OllamaChatServiceImplTest {
         when(httpClient.parseJson(any(String.class))).thenAnswer(inv ->
                 objectMapper.readTree(inv.getArgument(0, String.class)));
 
-        String result = service.streamChat(List.of(), "Hi", receivedTokens::add, cancelFlag);
+        OpenAIService.ChatResult result = service.streamChat(List.of(), "Hi", receivedTokens::add, cancelFlag);
 
-        assertThat(result).isEqualTo("Hello there!");
+        assertThat(result.response()).isEqualTo("Hello there!");
+        assertThat(result.usedFallback()).isFalse();
         assertThat(receivedTokens).containsExactly("Hello", " there!");
     }
 
@@ -85,9 +86,9 @@ class OllamaChatServiceImplTest {
         when(httpClient.parseJson(any(String.class))).thenAnswer(inv ->
                 objectMapper.readTree(inv.getArgument(0, String.class)));
 
-        String result = service.streamChat(List.of(historyMsg), "New message", receivedTokens::add, cancelFlag);
+        OpenAIService.ChatResult result = service.streamChat(List.of(historyMsg), "New message", receivedTokens::add, cancelFlag);
 
-        assertThat(result).isEqualTo("OK");
+        assertThat(result.response()).isEqualTo("OK");
     }
 
     @Test
@@ -133,9 +134,9 @@ class OllamaChatServiceImplTest {
             earlyCancel.set(true);
         };
 
-        String result = service.streamChat(List.of(), "Hi", callback, earlyCancel);
+        OpenAIService.ChatResult result = service.streamChat(List.of(), "Hi", callback, earlyCancel);
 
         assertThat(tokens).containsExactly("First");
-        assertThat(result).isEqualTo("First");
+        assertThat(result.response()).isEqualTo("First");
     }
 }

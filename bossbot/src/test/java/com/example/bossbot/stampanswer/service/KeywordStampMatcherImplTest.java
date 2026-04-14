@@ -34,7 +34,7 @@ class KeywordStampMatcherImplTest {
     void setUp() {
         config = new StampMatcherConfig();
         config.setMinInputLength(3);
-        config.setKeywordThreshold(0.5);
+        config.setKeywordThreshold(0.3);
         matcher = new KeywordStampMatcherImpl(repository, config);
 
         testStampAnswer = StampAnswer.builder()

@@ -13,7 +13,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class KeywordMatchUtilsTest {
 
     private static final int MIN_INPUT_LENGTH = 3;
-    private static final double KEYWORD_THRESHOLD = 0.5;
+    private static final double KEYWORD_THRESHOLD = 0.3;
 
     private StampAnswer buildStampAnswer(Long id, String question, String keywords, int priority) {
         return StampAnswer.builder()
