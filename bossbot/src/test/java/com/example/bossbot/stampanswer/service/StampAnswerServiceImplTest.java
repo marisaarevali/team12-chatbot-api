@@ -30,6 +30,9 @@ class StampAnswerServiceImplTest {
     @Mock
     private StampAnswerRepository repository;
 
+    @Mock
+    private StampMatcherService stampMatcherService;
+
     @InjectMocks
     private StampAnswerServiceImpl service;
 
@@ -78,6 +81,7 @@ class StampAnswerServiceImplTest {
         assertThat(response.getQuestion()).isEqualTo(testEntity.getQuestion());
         verify(repository).existsByQuestionIgnoreCase(createRequest.getQuestion());
         verify(repository).save(any(StampAnswer.class));
+        verify(stampMatcherService).refreshCache();
     }
 
     @Test
@@ -167,6 +171,7 @@ class StampAnswerServiceImplTest {
         assertThat(response).isNotNull();
         verify(repository).findById(1L);
         verify(repository).save(any(StampAnswer.class));
+        verify(stampMatcherService).refreshCache();
     }
 
     @Test
@@ -182,6 +187,7 @@ class StampAnswerServiceImplTest {
         // Then
         verify(repository).findById(1L);
         verify(repository).save(any(StampAnswer.class));
+        verify(stampMatcherService).refreshCache();
     }
 
     @Test

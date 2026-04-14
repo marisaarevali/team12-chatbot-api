@@ -4,22 +4,23 @@ import com.example.bossbot.ai.config.OpenAIConfig;
 import com.example.bossbot.message.dto.MessageResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
-@ConditionalOnProperty(name = "openai.api-key", havingValue = "mock", matchIfMissing = true)
+@ConditionalOnExpression("'${openai.api-key:mock}' == 'mock' and !${ollama.enabled:false}")
 public class MockOpenAIServiceImpl implements OpenAIService {
 
     private final OpenAIConfig config;
 
     @Override
-    public String streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback) {
+    public ChatResult streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
         log.info("Using MOCK OpenAI service (api-key=mock). Model configured: {}", config.getModel());
 
         String mockResponse = "I'm BossBot! This is a mock response. " +
@@ -27,9 +28,15 @@ public class MockOpenAIServiceImpl implements OpenAIService {
 
         // Simulate streaming by sending word by word with delays
         String[] words = mockResponse.split("(?<=\\s)");
+        StringBuilder sent = new StringBuilder();
 
         for (String word : words) {
+            if (cancelFlag.get()) {
+                log.info("Mock chat cancelled by user");
+                break;
+            }
             tokenCallback.accept(word);
+            sent.append(word);
 
             try {
                 Thread.sleep(50);
@@ -39,6 +46,6 @@ public class MockOpenAIServiceImpl implements OpenAIService {
             }
         }
 
-        return mockResponse;
+        return new ChatResult(sent.toString(), false);
     }
 }

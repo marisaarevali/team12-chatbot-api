@@ -8,16 +8,18 @@ import com.openai.core.http.StreamResponse;
 import com.openai.models.ChatModel;
 import com.openai.models.chat.completions.ChatCompletionChunk;
 import com.openai.models.chat.completions.ChatCompletionCreateParams;
+import com.openai.errors.OpenAIServiceException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 @Service
 @Slf4j
-@ConditionalOnExpression("'${openai.api-key:mock}' != 'mock'")
+@ConditionalOnExpression("'${openai.api-key:mock}' != 'mock' and !${ollama.enabled:false}")
 public class OpenAIServiceImpl implements OpenAIService {
 
     private final OpenAIClient client;
@@ -34,7 +36,7 @@ public class OpenAIServiceImpl implements OpenAIService {
     }
 
     @Override
-    public String streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback) {
+    public ChatResult streamChat(List<MessageResponse> conversationHistory, String userMessage, Consumer<String> tokenCallback, AtomicBoolean cancelFlag) {
         log.info("Calling OpenAI API with model: {}", config.getModel());
 
         List<PromptBuilder.ChatMessage> messages = promptBuilder.buildMessages(conversationHistory, userMessage);
@@ -57,6 +59,9 @@ public class OpenAIServiceImpl implements OpenAIService {
 
         try (StreamResponse<ChatCompletionChunk> streamResponse = client.chat().completions().createStreaming(paramsBuilder.build())) {
             streamResponse.stream().forEach(chunk -> {
+                if (cancelFlag.get()) {
+                    throw new RuntimeException("Generation cancelled");
+                }
                 List<ChatCompletionChunk.Choice> choices = chunk.choices();
 
                 if (!choices.isEmpty()) {
@@ -68,10 +73,18 @@ public class OpenAIServiceImpl implements OpenAIService {
                     }
                 }
             });
+        } catch (OpenAIServiceException e) {
+            throw e;
+        } catch (RuntimeException e) {
+            if (cancelFlag.get()) {
+                log.info("OpenAI chat cancelled by user");
+            } else {
+                throw e;
+            }
         }
 
         log.info("OpenAI response completed. Total length: {}", fullResponse.length());
 
-        return fullResponse.toString();
+        return new ChatResult(fullResponse.toString(), false);
     }
 }

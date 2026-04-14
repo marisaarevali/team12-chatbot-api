@@ -20,6 +20,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
     private static final String STAMP_ANSWER_NOT_FOUND = "Stamp answer not found with ID: ";
 
     private final StampAnswerRepository repository;
+    private final StampMatcherService stampMatcherService;
 
     @Override
     @Transactional
@@ -45,6 +46,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
 
         StampAnswer saved = repository.save(entity);
         log.info("Created stamp answer with ID: {}", saved.getId());
+        stampMatcherService.refreshCache();
 
         return StampAnswerResponse.fromEntity(saved);
     }
@@ -128,6 +130,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
 
         StampAnswer updated = repository.save(entity);
         log.info("Updated stamp answer with ID: {}", id);
+        stampMatcherService.refreshCache();
 
         return StampAnswerResponse.fromEntity(updated);
     }
@@ -142,6 +145,7 @@ public class StampAnswerServiceImpl implements StampAnswerService {
 
         entity.setIsActive(false);
         repository.save(entity);
+        stampMatcherService.refreshCache();
 
         log.info("Soft deleted stamp answer with ID: {}", id);
     }

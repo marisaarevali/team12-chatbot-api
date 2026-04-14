@@ -16,8 +16,15 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import jakarta.annotation.PreDestroy;
+
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
 @Slf4j
@@ -27,6 +34,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ChatConfig chatConfig;
     private final ObjectMapper objectMapper;
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, AtomicBoolean> cancelFlags = new ConcurrentHashMap<>();
+    private final Set<String> processing = ConcurrentHashMap.newKeySet();
+    private final ExecutorService executor = Executors.newFixedThreadPool(
+            Runtime.getRuntime().availableProcessors() * 2);
 
     public ChatWebSocketHandler(ChatService chatService, ChatConfig chatConfig) {
         this.chatService = chatService;
@@ -53,6 +64,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             ChatWebSocketMessage message = objectMapper.readValue(
                     textMessage.getPayload(), ChatWebSocketMessage.class);
 
+            if ("STOP_GENERATION".equals(message.getType())) {
+                AtomicBoolean flag = cancelFlags.get(session.getId());
+                if (flag != null) {
+                    flag.set(true);
+                    log.info("Stop generation requested for session: {}", session.getId());
+                }
+                return;
+            }
+
             if (!"SEND_MESSAGE".equals(message.getType())) {
                 sendResponse(safeSession, ChatWebSocketResponse.error("Unknown message type: " + message.getType()));
                 return;
@@ -68,8 +88,26 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
-            chatService.processMessage(message.getConversationId(), message.getContent(),
-                    response -> sendResponse(safeSession, response));
+            if (!processing.add(session.getId())) {
+                sendResponse(safeSession, ChatWebSocketResponse.error("Please wait for the current response to finish"));
+                return;
+            }
+
+            AtomicBoolean cancelFlag = new AtomicBoolean(false);
+            cancelFlags.put(session.getId(), cancelFlag);
+
+            executor.execute(() -> {
+                try {
+                    chatService.processMessage(message.getConversationId(), message.getContent(),
+                            response -> sendResponse(safeSession, response), cancelFlag);
+                } catch (Exception e) {
+                    log.error("Error processing message: {}", e.getMessage(), e);
+                    sendResponse(safeSession, ChatWebSocketResponse.error("Failed to process message"));
+                } finally {
+                    cancelFlags.remove(session.getId());
+                    processing.remove(session.getId());
+                }
+            });
 
         } catch (Exception e) {
             log.error("Error handling WebSocket message: {}", e.getMessage(), e);
@@ -80,12 +118,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         sessions.remove(session.getId());
+        cancelFlags.remove(session.getId());
+        processing.remove(session.getId());
         log.info("WebSocket disconnected: {} (status: {})", session.getId(), status);
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.error("WebSocket transport error for session {}: {}", session.getId(), exception.getMessage());
+    }
+
+    @PreDestroy
+    void shutdown() {
+        executor.shutdown();
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            executor.shutdownNow();
+        }
     }
 
     private void sendResponse(WebSocketSession session, ChatWebSocketResponse response) {
