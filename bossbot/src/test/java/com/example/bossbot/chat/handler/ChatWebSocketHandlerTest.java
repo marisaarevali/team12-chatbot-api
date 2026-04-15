@@ -58,13 +58,11 @@ class ChatWebSocketHandlerTest {
         // Given — connection established
         handler.afterConnectionEstablished(session);
 
-        // When — send 3 messages (burst count = 3)
+        // When — send 3 messages (burst count = 3), waiting for each to complete on the executor
         for (int i = 0; i < 3; i++) {
             handler.handleTextMessage(session, createMessage(1L, "Hello " + i));
+            verify(chatService, timeout(1000).times(i + 1)).processMessage(eq(1L), any(), any(), any());
         }
-
-        // Then — all 3 should reach the chat service
-        verify(chatService, times(3)).processMessage(eq(1L), any(), any());
     }
 
     @Test
@@ -73,19 +71,17 @@ class ChatWebSocketHandlerTest {
         // Given
         handler.afterConnectionEstablished(session);
 
-        // When — send 4 messages rapidly (burst = 3, so 4th triggers cooldown on 5th)
+        // When — send 4 messages (burst = 3, so 4th triggers cooldown on 5th)
         for (int i = 0; i < 4; i++) {
             handler.handleTextMessage(session, createMessage(1L, "Msg " + i));
+            verify(chatService, timeout(1000).times(i + 1)).processMessage(eq(1L), any(), any(), any());
         }
-
-        // The 4th message goes through but sets cooldown
-        verify(chatService, times(4)).processMessage(eq(1L), any(), any());
 
         // 5th message should be rate limited
         handler.handleTextMessage(session, createMessage(1L, "Msg 5"));
 
         // Still only 4 calls to chatService
-        verify(chatService, times(4)).processMessage(eq(1L), any(), any());
+        verify(chatService, times(4)).processMessage(eq(1L), any(), any(), any());
 
         // Verify a RATE_LIMITED response was sent
         ArgumentCaptor<TextMessage> captor = ArgumentCaptor.forClass(TextMessage.class);
@@ -105,6 +101,7 @@ class ChatWebSocketHandlerTest {
         // Burst of 3 goes through, 4th goes through but sets cooldown at 1000ms
         for (int i = 0; i < 4; i++) {
             handler.handleTextMessage(session, createMessage(1L, "Msg " + i));
+            verify(chatService, timeout(1000).times(i + 1)).processMessage(eq(1L), any(), any(), any());
         }
 
         // 5th message is rate limited (cooldown = 1000ms)
@@ -130,6 +127,7 @@ class ChatWebSocketHandlerTest {
         handler.afterConnectionEstablished(session);
         for (int i = 0; i < 4; i++) {
             handler.handleTextMessage(session, createMessage(1L, "Msg " + i));
+            verify(chatService, timeout(1000).times(i + 1)).processMessage(eq(1L), any(), any(), any());
         }
 
         // When — disconnect and reconnect
@@ -139,10 +137,8 @@ class ChatWebSocketHandlerTest {
         // Then — burst count resets, messages go through again
         for (int i = 0; i < 3; i++) {
             handler.handleTextMessage(session, createMessage(1L, "After reconnect " + i));
+            verify(chatService, timeout(1000).times(4 + i + 1)).processMessage(eq(1L), any(), any(), any());
         }
-
-        // 4 before disconnect + 3 after reconnect = 7 total
-        verify(chatService, times(7)).processMessage(eq(1L), any(), any());
     }
 
     @Test

@@ -10,7 +10,7 @@ final class KeywordMatchUtils {
     private KeywordMatchUtils() {
     }
 
-    static Optional<StampAnswer> findBestKeywordMatch(String input, List<StampAnswer> stampAnswers, int minInputLength, double keywordThreshold) {
+    static Optional<StampAnswer> findBestKeywordMatch(String input, List<StampAnswer> stampAnswers, int minInputLength, double keywordThreshold, double ambiguityThreshold) {
         if (input == null || input.trim().length() < minInputLength) {
             return Optional.empty();
         }
@@ -22,6 +22,7 @@ final class KeywordMatchUtils {
 
         StampAnswer bestMatch = null;
         double bestScore = 0;
+        double secondBestScore = 0;
 
         for (StampAnswer sa : stampAnswers) {
             Set<String> answerWords = tokenize(sa.getQuestion());
@@ -36,13 +37,16 @@ final class KeywordMatchUtils {
             long unionSize = inputWords.size() + answerWords.size() - matchCount;
             double score = unionSize == 0 ? 0.0 : (double) matchCount / unionSize;
 
-            if (score > bestScore || (score == bestScore && bestMatch != null && sa.getPriority() > bestMatch.getPriority())) {
+            if (score > bestScore) {
+                secondBestScore = bestScore;
                 bestScore = score;
                 bestMatch = sa;
+            } else if (score > secondBestScore) {
+                secondBestScore = score;
             }
         }
 
-        if (bestScore >= keywordThreshold) {
+        if (bestScore >= keywordThreshold && (bestScore - secondBestScore) >= ambiguityThreshold) {
             return Optional.of(bestMatch);
         }
         return Optional.empty();

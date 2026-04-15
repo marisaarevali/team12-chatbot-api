@@ -41,7 +41,7 @@ public class OllamaStampMatcherImpl implements StampMatcherService {
 
     @Override
     public void refreshCache() {
-        List<StampAnswer> active = repository.findByIsActiveTrueOrderByPriorityDesc();
+        List<StampAnswer> active = repository.findByIsActiveTrueOrderByCreatedAtDesc();
 
         if (active.isEmpty()) {
             cache.set(List.of());
@@ -109,30 +109,39 @@ public class OllamaStampMatcherImpl implements StampMatcherService {
 
             StampAnswer bestMatch = null;
             double bestSimilarity = 0;
+            double secondBestSimilarity = 0;
 
             for (StampAnswerEmbedding entry : entries) {
                 if (entry.embedding() == null) continue;
                 double similarity = cosineSimilarity(inputEmbedding, entry.embedding());
-                if (similarity > bestSimilarity ||
-                        (similarity == bestSimilarity && bestMatch != null
-                                && entry.stampAnswer().getPriority() > bestMatch.getPriority())) {
+                if (similarity > bestSimilarity) {
+                    secondBestSimilarity = bestSimilarity;
                     bestSimilarity = similarity;
                     bestMatch = entry.stampAnswer();
+                } else if (similarity > secondBestSimilarity) {
+                    secondBestSimilarity = similarity;
                 }
             }
 
-            if (bestSimilarity >= config.getSimilarityThreshold() && bestMatch != null) {
-                log.info("Semantic match found (similarity={}) for input: {}", bestSimilarity, userInput);
+            if (bestSimilarity >= config.getSimilarityThreshold() && bestMatch != null
+                    && (bestSimilarity - secondBestSimilarity) >= config.getAmbiguityThreshold()) {
+                log.info("Semantic match found (similarity={}, gap={}) for input: {}",
+                        bestSimilarity, bestSimilarity - secondBestSimilarity, userInput);
                 return Optional.of(StampAnswerResponse.fromEntity(bestMatch));
             }
 
-            log.debug("No semantic match above threshold {} for input: {}", config.getSimilarityThreshold(), userInput);
+            if (bestSimilarity >= config.getSimilarityThreshold() && bestMatch != null) {
+                log.info("Ambiguous match rejected (similarity={}, gap={}) for input: {}",
+                        bestSimilarity, bestSimilarity - secondBestSimilarity, userInput);
+            } else {
+                log.debug("No semantic match above threshold {} for input: {}", config.getSimilarityThreshold(), userInput);
+            }
             return Optional.empty();
 
         } catch (OllamaException e) {
             log.warn("Ollama unavailable at runtime, falling back to keyword matching: {}", e.getMessage());
             List<StampAnswer> stampAnswers = entries.stream().map(StampAnswerEmbedding::stampAnswer).toList();
-            return KeywordMatchUtils.findBestKeywordMatch(userInput, stampAnswers, config.getMinInputLength(), config.getKeywordThreshold())
+            return KeywordMatchUtils.findBestKeywordMatch(userInput, stampAnswers, config.getMinInputLength(), config.getKeywordThreshold(), config.getAmbiguityThreshold())
                     .map(StampAnswerResponse::fromEntity);
         }
     }

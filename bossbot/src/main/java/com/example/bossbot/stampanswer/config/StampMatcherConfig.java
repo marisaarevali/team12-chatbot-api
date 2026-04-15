@@ -12,4 +12,5 @@ public class StampMatcherConfig {
     private double similarityThreshold = 0.7;
     private double keywordThreshold = 0.3;
     private int minInputLength = 3;
+    private double ambiguityThreshold = 0.1;
 }
