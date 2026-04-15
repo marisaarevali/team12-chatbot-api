@@ -165,6 +165,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
 
         return false;
+    }
     @PreDestroy
     void shutdown() {
         executor.shutdown();
